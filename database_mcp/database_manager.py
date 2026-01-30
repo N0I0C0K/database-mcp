@@ -3,6 +3,7 @@ Database connection manager for multi-database support
 """
 import json
 from typing import Dict, Any, Optional
+from urllib.parse import quote_plus
 from sqlalchemy import create_engine, text, inspect
 from sqlalchemy.engine import Engine
 
@@ -21,10 +22,14 @@ class DatabaseConfig:
         
     def get_connection_url(self) -> str:
         """Generate SQLAlchemy connection URL"""
+        # Properly escape username and password to handle special characters
+        escaped_user = quote_plus(self.user)
+        escaped_password = quote_plus(self.password)
+        
         if self.type == "mysql":
-            return f"mysql+pymysql://{self.user}:{self.password}@{self.host}:{self.port}/{self.database}"
+            return f"mysql+pymysql://{escaped_user}:{escaped_password}@{self.host}:{self.port}/{self.database}"
         elif self.type == "postgresql":
-            return f"postgresql+psycopg2://{self.user}:{self.password}@{self.host}:{self.port}/{self.database}"
+            return f"postgresql+psycopg2://{escaped_user}:{escaped_password}@{self.host}:{self.port}/{self.database}"
         else:
             raise ValueError(f"Unsupported database type: {self.type}")
 
@@ -97,7 +102,12 @@ class DatabaseManager:
         return result
     
     def execute_query(self, query: str) -> Dict[str, Any]:
-        """Execute a SQL query on current database"""
+        """
+        Execute a SQL query on current database
+        
+        WARNING: This method executes raw SQL and is vulnerable to SQL injection.
+        Only use with trusted input or in controlled environments.
+        """
         engine = self.get_current_engine()
         
         with engine.connect() as conn:
@@ -136,6 +146,11 @@ class DatabaseManager:
         """Get table structure"""
         engine = self.get_current_engine()
         inspector = inspect(engine)
+        
+        # Validate table exists
+        available_tables = inspector.get_table_names()
+        if table_name not in available_tables:
+            raise ValueError(f"Table '{table_name}' not found. Available tables: {', '.join(available_tables)}")
         
         columns = inspector.get_columns(table_name)
         primary_keys = inspector.get_pk_constraint(table_name)

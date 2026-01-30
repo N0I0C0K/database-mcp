@@ -5,6 +5,7 @@ A Model Context Protocol server for managing multiple database connections
 import os
 from typing import Any
 from fastmcp import FastMCP
+from sqlalchemy.exc import SQLAlchemyError, OperationalError, ProgrammingError
 from database_mcp.database_manager import DatabaseManager
 
 # Initialize FastMCP server
@@ -71,6 +72,8 @@ def execute_query(query: str) -> dict[str, Any]:
     """
     Execute a SQL query on the current database
     
+    WARNING: This tool executes raw SQL. Only use with trusted queries.
+    
     Args:
         query: SQL query to execute
         
@@ -87,10 +90,28 @@ def execute_query(query: str) -> dict[str, Any]:
         result = db_manager.execute_query(query)
         result["database"] = db_manager.current_db
         return result
+    except ProgrammingError as e:
+        return {
+            "success": False,
+            "error": f"SQL syntax error: {str(e)}",
+            "database": db_manager.current_db
+        }
+    except OperationalError as e:
+        return {
+            "success": False,
+            "error": f"Database connection or permission error: {str(e)}",
+            "database": db_manager.current_db
+        }
+    except SQLAlchemyError as e:
+        return {
+            "success": False,
+            "error": f"Database error: {str(e)}",
+            "database": db_manager.current_db
+        }
     except Exception as e:
         return {
             "success": False,
-            "error": str(e),
+            "error": f"Unexpected error: {str(e)}",
             "database": db_manager.current_db
         }
 
@@ -117,10 +138,22 @@ def list_tables() -> dict[str, Any]:
             "tables": tables,
             "count": len(tables)
         }
+    except OperationalError as e:
+        return {
+            "success": False,
+            "error": f"Database connection error: {str(e)}",
+            "database": db_manager.current_db
+        }
+    except SQLAlchemyError as e:
+        return {
+            "success": False,
+            "error": f"Database error: {str(e)}",
+            "database": db_manager.current_db
+        }
     except Exception as e:
         return {
             "success": False,
-            "error": str(e),
+            "error": f"Unexpected error: {str(e)}",
             "database": db_manager.current_db
         }
 
@@ -147,10 +180,29 @@ def describe_table(table_name: str) -> dict[str, Any]:
         table_info["success"] = True
         table_info["database"] = db_manager.current_db
         return table_info
-    except Exception as e:
+    except ValueError as e:
+        # Table not found or validation error
         return {
             "success": False,
             "error": str(e),
+            "database": db_manager.current_db
+        }
+    except OperationalError as e:
+        return {
+            "success": False,
+            "error": f"Database connection error: {str(e)}",
+            "database": db_manager.current_db
+        }
+    except SQLAlchemyError as e:
+        return {
+            "success": False,
+            "error": f"Database error: {str(e)}",
+            "database": db_manager.current_db
+        }
+    except Exception as e:
+        return {
+            "success": False,
+            "error": f"Unexpected error: {str(e)}",
             "database": db_manager.current_db
         }
 
