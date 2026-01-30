@@ -68,8 +68,6 @@ class DatabaseManager:
         
         return self.engines[name]
     
-
-    
     def list_databases(self) -> Dict[str, Dict[str, Any]]:
         """List all configured databases"""
         result = {}
