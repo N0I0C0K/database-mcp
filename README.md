@@ -8,13 +8,39 @@
 - 🔀 方便地在不同数据库间切换查询
 - 🗄️ 支持 MySQL 和 PostgreSQL
 - 🔍 提供数据库查询、表结构查看等功能
+- 🛡️ 通过配置文件管理数据库连接信息
+
+## 背景
+
+现有的数据库 MCP 服务（如 @designcomputer/mysql_mcp_server）只支持单个数据库连接。在日常开发中，我们经常需要在多个数据库之间切换，例如：
+
+- 在 dev1 上查询某条数据，检查是否和生产环境一致
+- 将生产环境数据部分同步到测试数据库
+- 对比不同环境的数据差异
+
+这个项目提供了一个更灵活的解决方案，允许您轻松管理和切换多个数据库连接。
 
 ## 安装
 
-使用 uv 安装依赖：
+### 使用 uv（推荐）
 
 ```bash
+# 创建虚拟环境
+uv venv
+
+# 激活虚拟环境
+source .venv/bin/activate  # Linux/Mac
+# 或
+.venv\Scripts\activate  # Windows
+
+# 安装依赖
 uv pip install -e .
+```
+
+### 使用 pip
+
+```bash
+pip install -e .
 ```
 
 ## 配置
@@ -52,53 +78,253 @@ uv pip install -e .
 }
 ```
 
+**注意**: `config.json` 文件包含敏感信息，已添加到 `.gitignore`，不会被提交到版本控制。
+
+你可以复制 `config.example.json` 作为起点：
+
+```bash
+cp config.example.json config.json
+# 然后编辑 config.json 填入真实的数据库连接信息
+```
+
+### 支持的数据库类型
+
+- `mysql` - MySQL 数据库
+- `postgresql` - PostgreSQL 数据库
+
 ## 使用方法
 
-启动 MCP 服务器：
+### 启动 MCP 服务器
+
+方式一：直接运行
 
 ```bash
 python -m database_mcp.server
 ```
 
-或者使用 fastmcp 的 dev 模式：
+方式二：使用 fastmcp 的开发模式
 
 ```bash
 fastmcp dev database_mcp/server.py
 ```
 
+方式三：使用自定义配置文件路径
+
+```bash
+export DATABASE_CONFIG=/path/to/your/config.json
+python -m database_mcp.server
+```
+
+### 运行演示
+
+```bash
+python demo.py
+```
+
+这将演示如何列出数据库、切换数据库等功能。
+
 ## MCP 工具
 
 服务器提供以下工具：
 
-### list_databases
-列出所有已配置的数据库
+### 1. list_databases
 
-### switch_database
+列出所有已配置的数据库及其状态
+
+**返回示例**:
+```json
+{
+  "current_database": "dev1",
+  "databases": {
+    "dev1": {
+      "type": "mysql",
+      "host": "localhost",
+      "port": 3306,
+      "database": "dev_db",
+      "current": true
+    },
+    "production": {
+      "type": "mysql",
+      "host": "prod.example.com",
+      "port": 3306,
+      "database": "prod_db",
+      "current": false
+    }
+  }
+}
+```
+
+### 2. switch_database
+
 切换当前活动的数据库
-- 参数: `name` - 数据库名称
 
-### execute_query
+**参数**:
+- `name` (string) - 数据库名称
+
+**返回示例**:
+```json
+{
+  "success": true,
+  "message": "Switched to database: production",
+  "current_database": "production"
+}
+```
+
+### 3. execute_query
+
 在当前活动数据库上执行 SQL 查询
-- 参数: `query` - SQL 查询语句
 
-### list_tables
+**参数**:
+- `query` (string) - SQL 查询语句
+
+**返回示例（SELECT 查询）**:
+```json
+{
+  "success": true,
+  "database": "dev1",
+  "columns": ["id", "name", "email"],
+  "data": [
+    {"id": 1, "name": "Alice", "email": "alice@example.com"},
+    {"id": 2, "name": "Bob", "email": "bob@example.com"}
+  ],
+  "row_count": 2
+}
+```
+
+**返回示例（INSERT/UPDATE/DELETE 查询）**:
+```json
+{
+  "success": true,
+  "database": "dev1",
+  "rows_affected": 1
+}
+```
+
+### 4. list_tables
+
 列出当前数据库中的所有表
 
-### describe_table
-查看表结构
-- 参数: `table_name` - 表名
+**返回示例**:
+```json
+{
+  "success": true,
+  "database": "dev1",
+  "tables": ["users", "orders", "products"],
+  "count": 3
+}
+```
+
+### 5. describe_table
+
+查看表结构的详细信息
+
+**参数**:
+- `table_name` (string) - 表名
+
+**返回示例**:
+```json
+{
+  "success": true,
+  "database": "dev1",
+  "table_name": "users",
+  "columns": [
+    {
+      "name": "id",
+      "type": "INTEGER",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "name": "name",
+      "type": "VARCHAR(100)",
+      "nullable": false,
+      "default": null
+    }
+  ],
+  "primary_keys": {
+    "constrained_columns": ["id"],
+    "name": "PRIMARY"
+  },
+  "indexes": [],
+  "foreign_keys": []
+}
+```
 
 ## 使用场景示例
 
-1. **对比不同环境数据**
-   - 切换到 dev1 数据库查询某条数据
-   - 切换到 production 数据库查询同样的数据
-   - 对比结果
+### 场景 1: 对比不同环境的数据
 
-2. **数据同步**
-   - 从 production 查询数据
-   - 切换到 test 数据库
-   - 插入或更新数据
+```
+1. list_databases() - 查看所有可用的数据库
+2. switch_database("dev1") - 切换到开发数据库
+3. execute_query("SELECT * FROM users WHERE id = 123") - 查询开发环境数据
+4. switch_database("production") - 切换到生产数据库
+5. execute_query("SELECT * FROM users WHERE id = 123") - 查询生产环境数据
+6. 对比两次查询结果
+```
+
+### 场景 2: 数据同步
+
+```
+1. switch_database("production") - 切换到生产数据库
+2. execute_query("SELECT * FROM products WHERE category = 'new'") - 获取生产数据
+3. switch_database("test") - 切换到测试数据库
+4. execute_query("INSERT INTO products ...") - 插入数据到测试库
+```
+
+### 场景 3: 数据库结构对比
+
+```
+1. switch_database("dev1") - 切换到开发数据库
+2. describe_table("users") - 查看开发环境的表结构
+3. switch_database("production") - 切换到生产数据库
+4. describe_table("users") - 查看生产环境的表结构
+5. 对比两个环境的表结构差异
+```
+
+## 开发
+
+### 运行测试
+
+```bash
+# 安装开发依赖
+uv pip install pytest pytest-asyncio
+
+# 运行测试
+pytest tests/ -v
+```
+
+### 项目结构
+
+```
+database-mcp/
+├── database_mcp/          # 主包
+│   ├── __init__.py
+│   ├── server.py          # MCP 服务器入口
+│   └── database_manager.py # 数据库管理器
+├── tests/                 # 测试文件
+│   ├── __init__.py
+│   └── test_database_manager.py
+├── config.example.json    # 配置文件示例
+├── demo.py                # 演示脚本
+├── README.md              # 本文件
+└── pyproject.toml         # 项目配置
+```
+
+## 技术栈
+
+- **fastmcp**: MCP 服务器框架
+- **SQLAlchemy**: 数据库 ORM 和连接管理
+- **pymysql**: MySQL 数据库驱动
+- **psycopg2**: PostgreSQL 数据库驱动
+- **uv**: 快速的 Python 包管理器
+
+## 安全注意事项
+
+1. **不要提交配置文件**: `config.json` 包含敏感的数据库凭证，已经添加到 `.gitignore`
+2. **使用只读账户**: 对于生产数据库，建议使用只读权限的账户
+3. **网络安全**: 确保数据库服务器有适当的防火墙规则
+4. **密码安全**: 使用强密码，考虑使用环境变量或密钥管理服务
 
 ## 许可证
 
