@@ -5,7 +5,7 @@
 ## 功能特性
 
 - 🔄 支持同时连接多个数据库
-- 🔀 方便地在不同数据库间切换查询
+- 🎯 无状态设计 - 每次调用指定数据库
 - 🗄️ 支持 MySQL 和 PostgreSQL
 - 🔍 提供数据库查询、表结构查看等功能
 - 🛡️ 通过配置文件管理数据库连接信息
@@ -18,7 +18,7 @@
 - 将生产环境数据部分同步到测试数据库
 - 对比不同环境的数据差异
 
-这个项目提供了一个更灵活的解决方案，允许您轻松管理和切换多个数据库连接。
+这个项目提供了一个更灵活的解决方案，采用**无状态设计**，每次工具调用时指定要操作的数据库，无需维护状态。
 
 ## 安装
 
@@ -121,60 +121,42 @@ python -m database_mcp.server
 python demo.py
 ```
 
-这将演示如何列出数据库、切换数据库等功能。
+这将演示无状态的数据库操作。
 
 ## MCP 工具
 
-服务器提供以下工具：
+服务器提供以下工具（无状态设计）：
 
 ### 1. list_databases
 
-列出所有已配置的数据库及其状态
+列出所有已配置的数据库
 
 **返回示例**:
 ```json
 {
-  "current_database": "dev1",
   "databases": {
     "dev1": {
       "type": "mysql",
       "host": "localhost",
       "port": 3306,
-      "database": "dev_db",
-      "current": true
+      "database": "dev_db"
     },
     "production": {
       "type": "mysql",
       "host": "prod.example.com",
       "port": 3306,
-      "database": "prod_db",
-      "current": false
+      "database": "prod_db"
     }
   }
 }
 ```
 
-### 2. switch_database
+### 2. execute_query
 
-切换当前活动的数据库
-
-**参数**:
-- `name` (string) - 数据库名称
-
-**返回示例**:
-```json
-{
-  "success": true,
-  "message": "Switched to database: production",
-  "current_database": "production"
-}
-```
-
-### 3. execute_query
-
-在当前活动数据库上执行 SQL 查询
+在指定数据库上执行 SQL 查询
 
 **参数**:
+- `database` (string) - 数据库名称
 - `query` (string) - SQL 查询语句
 
 **返回示例（SELECT 查询）**:
@@ -200,9 +182,12 @@ python demo.py
 }
 ```
 
-### 4. list_tables
+### 3. list_tables
 
-列出当前数据库中的所有表
+列出指定数据库中的所有表
+
+**参数**:
+- `database` (string) - 数据库名称
 
 **返回示例**:
 ```json
@@ -214,11 +199,12 @@ python demo.py
 }
 ```
 
-### 5. describe_table
+### 4. describe_table
 
 查看表结构的详细信息
 
 **参数**:
+- `database` (string) - 数据库名称
 - `table_name` (string) - 表名
 
 **返回示例**:
@@ -250,36 +236,46 @@ python demo.py
 }
 ```
 
+## 无状态设计优势
+
+本服务采用**无状态设计**，每次工具调用都需要明确指定要操作的数据库：
+
+✅ **优点**:
+- 无需管理服务器端状态
+- 多个客户端可以并发使用，互不干扰
+- 每次调用都是独立的，更加清晰明确
+- 适合分布式和无服务器环境
+- 减少状态不一致的问题
+
+💡 **使用方式**:
+- 每次调用 `execute_query`、`list_tables`、`describe_table` 时指定 `database` 参数
+- 可以在同一个会话中自由访问不同数据库，无需"切换"
+- 没有"当前数据库"的概念，避免混淆
+
 ## 使用场景示例
 
-### 场景 1: 对比不同环境的数据
+### 场景 1: 对比不同环境的数据（无状态）
 
 ```
 1. list_databases() - 查看所有可用的数据库
-2. switch_database("dev1") - 切换到开发数据库
-3. execute_query("SELECT * FROM users WHERE id = 123") - 查询开发环境数据
-4. switch_database("production") - 切换到生产数据库
-5. execute_query("SELECT * FROM users WHERE id = 123") - 查询生产环境数据
-6. 对比两次查询结果
+2. execute_query("dev1", "SELECT * FROM users WHERE id = 123") - 查询开发环境数据
+3. execute_query("production", "SELECT * FROM users WHERE id = 123") - 查询生产环境数据
+4. 对比两次查询结果
 ```
 
-### 场景 2: 数据同步
+### 场景 2: 数据同步（无状态）
 
 ```
-1. switch_database("production") - 切换到生产数据库
-2. execute_query("SELECT * FROM products WHERE category = 'new'") - 获取生产数据
-3. switch_database("test") - 切换到测试数据库
-4. execute_query("INSERT INTO products ...") - 插入数据到测试库
+1. execute_query("production", "SELECT * FROM products WHERE category = 'new'") - 获取生产数据
+2. execute_query("test", "INSERT INTO products ...") - 插入数据到测试库
 ```
 
-### 场景 3: 数据库结构对比
+### 场景 3: 数据库结构对比（无状态）
 
 ```
-1. switch_database("dev1") - 切换到开发数据库
-2. describe_table("users") - 查看开发环境的表结构
-3. switch_database("production") - 切换到生产数据库
-4. describe_table("users") - 查看生产环境的表结构
-5. 对比两个环境的表结构差异
+1. describe_table("dev1", "users") - 查看开发环境的表结构
+2. describe_table("production", "users") - 查看生产环境的表结构
+3. 对比两个环境的表结构差异
 ```
 
 ## 开发

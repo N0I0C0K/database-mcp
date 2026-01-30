@@ -1,6 +1,6 @@
 # 使用指南
 
-本指南将帮助您快速上手 Database MCP Server。
+本指南将帮助您快速上手 Database MCP Server（无状态设计）。
 
 ## 快速开始
 
@@ -114,7 +114,7 @@ fastmcp dev database_mcp/server.py
 }
 ```
 
-## 常见工作流
+## 常见工作流（无状态设计）
 
 ### 工作流 1: 数据一致性检查
 
@@ -125,99 +125,94 @@ fastmcp dev database_mcp/server.py
    工具: list_databases()
    ```
 
-2. 切换到开发数据库
+2. 查询开发环境的用户数据（直接指定数据库）
    ```
-   工具: switch_database("development")
-   ```
-
-3. 查询开发环境的用户数据
-   ```
-   工具: execute_query("SELECT * FROM users WHERE id = 1001")
+   工具: execute_query("development", "SELECT * FROM users WHERE id = 1001")
    ```
 
-4. 切换到生产数据库
+3. 查询生产环境的同一用户（直接指定数据库）
    ```
-   工具: switch_database("production")
-   ```
-
-5. 查询生产环境的同一用户
-   ```
-   工具: execute_query("SELECT * FROM users WHERE id = 1001")
+   工具: execute_query("production", "SELECT * FROM users WHERE id = 1001")
    ```
 
-6. 对比结果，找出差异
+4. 对比结果，找出差异
 
 ### 工作流 2: 跨环境数据复制
 
 **场景**: 从生产环境复制特定数据到测试环境
 
-1. 切换到生产数据库
+1. 获取生产环境的数据（直接指定数据库）
    ```
-   工具: switch_database("production")
-   ```
-
-2. 获取需要复制的数据
-   ```
-   工具: execute_query("SELECT * FROM products WHERE category = 'featured' LIMIT 10")
+   工具: execute_query("production", "SELECT * FROM products WHERE category = 'featured' LIMIT 10")
    ```
 
-3. 记录查询结果
+2. 记录查询结果
 
-4. 切换到测试数据库
+3. 插入数据到测试环境（直接指定数据库）
    ```
-   工具: switch_database("staging")
-   ```
-
-5. 插入数据（基于第2步的结果构造 INSERT 语句）
-   ```
-   工具: execute_query("INSERT INTO products (id, name, category, price) VALUES ...")
+   工具: execute_query("staging", "INSERT INTO products (id, name, category, price) VALUES ...")
    ```
 
 ### 工作流 3: 数据库结构审计
 
 **场景**: 比较不同环境的数据库表结构
 
-1. 切换到开发数据库
+1. 列出开发数据库的所有表
    ```
-   工具: switch_database("development")
-   ```
-
-2. 列出所有表
-   ```
-   工具: list_tables()
+   工具: list_tables("development")
    ```
 
-3. 查看特定表结构
+2. 查看开发环境的表结构
    ```
-   工具: describe_table("users")
-   ```
-
-4. 切换到生产数据库并重复步骤2-3
-   ```
-   工具: switch_database("production")
-   工具: list_tables()
-   工具: describe_table("users")
+   工具: describe_table("development", "users")
    ```
 
-5. 对比表结构差异，识别需要迁移的变更
+3. 查看生产环境的表结构
+   ```
+   工具: describe_table("production", "users")
+   ```
 
-### 工作流 4: 多数据源数据分析
+4. 对比表结构差异，识别需要迁移的变更
+
+### 工作流 4: 多数据源数据分析（无状态）
 
 **场景**: 从多个数据库收集数据进行分析
 
 1. 从 MySQL 数据库获取订单数据
    ```
-   工具: switch_database("mysql_orders")
-   工具: execute_query("SELECT order_id, total FROM orders WHERE date > '2024-01-01'")
+   工具: execute_query("mysql_orders", "SELECT order_id, total FROM orders WHERE date > '2024-01-01'")
    ```
 
 2. 从 PostgreSQL 数据库获取用户数据
    ```
-   工具: switch_database("postgres_users")
-   工具: execute_query("SELECT user_id, name FROM users WHERE active = true")
+   工具: execute_query("postgres_users", "SELECT user_id, name FROM users WHERE active = true")
    ```
 
 3. 在客户端合并和分析数据
+
+## 无状态设计说明
+
+### 核心概念
+
+本服务采用**无状态设计**，这意味着：
+
+- ❌ 没有"当前数据库"的概念
+- ❌ 不需要（也没有）`switch_database` 工具
+- ✅ 每次调用都明确指定要操作的数据库
+- ✅ 服务器不保存任何状态信息
+
+### 优势
+
+1. **并发友好**: 多个客户端可以同时使用，互不干扰
+2. **简单清晰**: 每次调用都是独立的，不依赖之前的状态
+3. **避免混淆**: 明确知道在操作哪个数据库
+4. **适合分布式**: 无状态服务更容易扩展和部署
+
+### 使用提示
+
+- 每次调用 `execute_query`、`list_tables`、`describe_table` 时，第一个参数都是数据库名称
+- 可以连续访问不同数据库，无需任何"切换"操作
+- 建议在工作流中明确记录正在操作的数据库名称
 
 ## 最佳实践
 
